@@ -1,0 +1,9 @@
+{
+  "name": "spotify_playlist_creator",
+  "version": "1.0.0",
+  "description": "Creates playlist on Spotify using local files",
+  "main": "index.js",
+  "repository": "https://github.com/duskent/spotify_playlist_creator",
+  "author": "Julian Ronayi <yuliy.ronayi@gmail.com>",
+  "license": "MIT"
+}
