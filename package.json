@@ -10,7 +10,9 @@
     "start": "node dist/index.js",
     "prebuild": "rimraf dist",
     "transpile": "babel src -d dist",
-    "build": "npm run prebuild && npm run transpile"
+    "transpile:watch": "babel src -d dist -w",
+    "build": "npm run prebuild && npm run transpile",
+    "build:watch": "npm run prebuild && npm run transpile:watch"
   },
   "dependencies": {
     "dotenv": "^4.0.0",
