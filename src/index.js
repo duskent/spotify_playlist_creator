@@ -1,114 +1,76 @@
 import 'babel-polyfill'
 // Importing modules
-import request from 'request-promise'
-import {encodeInBase64} from './utils/encodeInBase64'
+import SpotifyWebApi from 'spotify-web-api-node'
+import fs from 'fs'
+import {join} from 'path'
 // Loading configuration
 import dotenv from 'dotenv'
 dotenv.config()
 
-const CLIENT_ID = process.env.CLIENT_ID
-const CLIENT_SECRET = process.env.CLIENT_SECRET
-const AUTH_CODE = process.env.AUTH_CODE
+const spotifyApi = new SpotifyWebApi({
+  clientId : process.env.CLIENT_ID,
+  clientSecret : process.env.CLIENT_SECRET,
+  redirectUri : process.env.REDIRECT_URI
+})
 
-// Get user Authentication code
-const getAuthorizationCode = () => {
-  if (!AUTH_CODE) {
-    const url = `https://accounts.spotify.com/authorize/?client_id=${CLIENT_ID}&response_type=code&redirect_uri=http://www.webiste.com/&scope=user-read-private%20user-read-email%20user-library-modify`
-    console.log(`Please go to this link and insert your code\n\n${url}\n\n`)
-    process.exit()
-  }
+if (!process.env.AUTH_CODE) {
+  const scopes = [
+    'user-read-private',
+    'user-read-email',
+    'playlist-modify-public',
+    'playlist-modify-private'
+  ]
+  const authorizeURL = spotifyApi.createAuthorizeURL(scopes, null)
 
-  return AUTH_CODE
+  console.log(authorizeURL)
+  process.exit()
 }
 
-// Authentication
-const getAuthToken = async(code, redirect_uri) => {
-  const options = {
-    method: 'POST',
-    url: 'https://accounts.spotify.com/api/token',
-    form: {
-      code: code,
-      redirect_uri: redirect_uri,
-      grant_type: 'authorization_code'
-    },
-    headers: {
-      Authorization: 'Basic ' + encodeInBase64(`${CLIENT_ID}:${CLIENT_SECRET}`)
-    },
-    json: true
-  }
+const playlistName = 'VK music'
+const data = fs.readFileSync(join(__dirname, '../data/music.txt'), 'utf8')
 
-  try {
-    const response = await request(options)
-    const accessToken = await response.access_token
+let tracks = data.split('\n')
 
-    return Promise.resolve(accessToken)
-  }
-  catch (error) {
-    return Promise.reject(error)
-  }
-}
 
-const getMyInfo = async (accessToken) => {
-  try {
-    const options = {
-      uri: 'https://api.spotify.com/v1/me',
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    }
+spotifyApi.authorizationCodeGrant(process.env.AUTH_CODE)
+  .then((data) => {
+    console.log(`The token expires in ${data.body['expires_in']}`)
+    console.log(`The access token is ${data.body['access_token']}`)
+    console.log(`The refresh token is ${data.body['refresh_token']}`)
 
-    const response = await request(options)
-    return Promise.resolve(response)
-  }
-  catch (error) {
-    return Promise.reject(error)
-  }
-}
+    // Set the access token on the API object to use it in later calls
+    spotifyApi.setAccessToken(data.body['access_token'])
+    spotifyApi.setRefreshToken(data.body['refresh_token'])
 
-// Search for a track
-const findTrack = async (trackName) => {
-  try {
-    const query = encodeURIComponent(trackName)
-    const type = 'track'
-
-    const response = await request(`https://api.spotify.com/v1/search?q=${query}&type=${type}`)
-    const trackId = await JSON.parse(response).tracks.items[0].id
-
-    return Promise.resolve(trackId)
-  } catch (error) {
-    return Promise.reject(error)
-  }
-}
-
-const addTrack = async(trackId, userToken) => {
-  try {
-    const options = {
-      method: 'PUT',
-      uri: 'https://api.spotify.com/v1/me/tracks',
-      body: [trackId],
-      headers: {
-        Authorization: `Bearer ${userToken}`
-      },
-      json: true
-    }
-
-    const response = await request(options)
-    return Promise.resolve(response)
-  } catch (error) {
-    return Promise.reject(error)
-  }
-}
-
-const userCode = getAuthorizationCode()
-
-getAuthToken(userCode, 'http://www.webiste.com/')
-  .then(accessToken => {
-    findTrack('Slipknot - Wait and Bleed')
-      .then(trackId => {
-        addTrack(trackId, accessToken)
-          .then(res => console.log(res))
-          .catch(err => console.log(err))
+    // Create Playlist
+    spotifyApi.createPlaylist(process.env.USERNAME, playlistName, { 'public' : true })
+      .then((data) => {
+        const playlistId = data.id
+      }, (err) => {
+        console.log('Something went wrong while creating playlist!', err)
       })
-      .catch(err => console.log(err))
+
+    for (var i = 0; i < tracks.length; i++) {
+      spotifyApi.searchTracks(tracks[i])
+        .then(data => {
+          if (data.tracks && data.tracks[0]) {
+            console.log(data.tracks[0].id)
+          } else {
+            fs.appendFileSync(join(__dirname, '../data/out.txt'), tracks[i])
+          }
+        })
+        .catch(err => console.log(err))
+    }
+
+
+    //
+    //   // Add tracks to a playlist
+    //   spotifyApi.addTracksToPlaylist('thelinmichael', '5ieJqeLJjjI8iJWaxeBLuK', ["spotify:track:4iV5W9uYEdYUVa79Axb7Rh", "spotify:track:1301WleyT98MSxVHPZCA6M"])
+    //     .then(function(data) {
+    //       console.log('Added tracks to playlist!');
+    //     }, function(err) {
+    //       console.log('Something went wrong!', err);
+    //     });
+  }, (err) => {
+    console.log('Something went wrong!', err)
   })
-  .catch(err => console.log(err))
